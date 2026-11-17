@@ -63,22 +63,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     driver.set_verbose(entry.options.get(CONF.VERBOSE, False), initial=True)
 
+    # Restore cached metadata first. A missing live state must not trigger
+    # multiple unbounded cloud refreshes during Home Assistant startup.
     if state := entry.data.get(CONF.SYS_STATE):
         driver.set_system_state(SystemDetails.from_dict(state))
     else:
-        _LOGGER.warning("CONF.SYS_STATE missing")
-        await driver.full_refresh(initial=True)
+        _LOGGER.warning("CONF.SYS_STATE missing; fetching controller metadata")
+        try:
+            await asyncio.wait_for(driver.startup(), timeout=20)
+        except Exception as exc:
+            _LOGGER.warning("Controller metadata unavailable: %s", exc)
+            from homeassistant.exceptions import ConfigEntryNotReady
+            raise ConfigEntryNotReady("MagIQtouch controller metadata unavailable") from exc
 
     if zones := entry.data.get(CONF.ZONES):
         driver.zone_list = [ZoneType(*cz) for cz in zones]
+    elif driver.current_system_state.NoOfZoneControls == 0:
+        from .const import ZONE_NONE
+        driver.zone_list = [ZONE_NONE]
     else:
-        _LOGGER.warning("CONF.ZONES missing")
-        await driver.full_refresh(initial=True)
+        _LOGGER.warning("Zone metadata missing; awaiting a valid device state")
 
     if state := entry.data.get(CONF.STATE):
         driver.current_state = RemoteStatus.from_dict(state)
-    if driver.current_state.runningMode == "":
-        _LOGGER.warning("CONF.STATE missing")
+
+    if not driver.current_state.runningMode:
+        _LOGGER.warning("Live controller state unavailable at startup")
+        # One bounded attempt. Background refresh is scheduled by the driver
+        # when the cloud returns an offline/empty status.
         await driver.full_refresh(initial=True)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
