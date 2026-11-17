@@ -12,7 +12,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature
 
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.update_coordinator import (
@@ -78,7 +77,7 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = (
             controller.native_unit_of_measurement
             if controller.current_state.runningMode
-            else UnitOfTemperature.CELSIUS
+            else coordinator.hass.config.units.temperature_unit
         )
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
