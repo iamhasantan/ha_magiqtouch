@@ -169,7 +169,11 @@ class MagIQtouch_Driver:
         _LOGGER.info(f"ws send: {message}")
 
         try:
-            await self.ws_handler(job)
+            # Limit the whole handshake and response, not just ws.receive.
+            if checker:
+                await asyncio.wait_for(self.ws_handler(job), timeout=timeout)
+            else:
+                await self.ws_handler(job)
             if self.verbose:
                 _LOGGER.info("ws sent and received: %s\n%s" % (message, self.current_state))
             return job.status == "confirmed" if checker else True
@@ -405,6 +409,10 @@ class MagIQtouch_Driver:
         verbose = self.verbose or self.current_state.runningMode == ""
         if verbose and new_state != self.current_state:
             _LOGGER.warning(f"Current State: {new_state}")
+
+        if not new_state.runningMode or not new_state.online:
+            _LOGGER.debug("Ignoring offline or uninitialised device state")
+            return
 
         self.current_state.update(new_state)
         self._state_confirmed = True
