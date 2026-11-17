@@ -31,7 +31,6 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
     PRECISION_WHOLE,
-    UnitOfTemperature,
 )
 from .const import (
     DOMAIN,
@@ -192,7 +191,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     def temperature_unit(self):
         """Return the unit of measurement that is used."""
         if not self.controller.current_state.runningMode:
-            return UnitOfTemperature.CELSIUS
+            return self.hass.config.units.temperature_unit
         return self.controller.native_unit_of_measurement
 
     @property
@@ -211,9 +210,11 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
             return None
         if len(units) > 1:
             itemps = [u.internal_temp for u in units if u.internal_temp < 100]
-            current = sum(itemps) / len(itemps)
+            current = sum(itemps) / len(itemps) if itemps else None
         else:
             current = units[0].internal_temp
+        if current is None:
+            return None
         if current > 100:
             # No sensor
             try:
