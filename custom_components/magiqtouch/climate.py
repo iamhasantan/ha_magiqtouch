@@ -31,6 +31,7 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
     PRECISION_WHOLE,
+    UnitOfTemperature,
 )
 from .const import (
     DOMAIN,
@@ -126,7 +127,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def unique_id(self) -> str:
         """Return the unique ID for this sensor."""
-        uid = self.controller.current_state.device
+        uid = self.controller.current_state.device or self.controller.current_system_state.Wifi_Module.MacAddressId
         if not self.master_zone:
             zone_name = self.controller.get_zone_name(self.zone).replace(" ", "-")
             uid += f"-zone-{zone_name}"
@@ -190,6 +191,8 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def temperature_unit(self):
         """Return the unit of measurement that is used."""
+        if not self.controller.current_state.runningMode:
+            return UnitOfTemperature.CELSIUS
         return self.controller.native_unit_of_measurement
 
     @property
@@ -204,6 +207,8 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def current_temperature(self):
         units = self.active_units or self.inactive_units
+        if not units:
+            return None
         if len(units) > 1:
             itemps = [u.internal_temp for u in units if u.internal_temp < 100]
             current = sum(itemps) / len(itemps)
@@ -222,13 +227,13 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     def target_temperature(self):
         """Return the temperature we try to reach."""
         units = self.active_units or self.inactive_units
-        return units[0].set_temp
+        return units[0].set_temp if units else None
         # return self.controller.active_device(self.zone).set_temp
 
     @property
     def max_temp(self):
         units = self.active_units or self.inactive_units
-        return units[0].max_temp
+        return units[0].max_temp if units else 35
         # try:
         #     return self.controller.active_device(self.zone).max_temp
         # except:
@@ -237,7 +242,7 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def min_temp(self):
         units = self.active_units or self.inactive_units
-        return units[0].min_temp
+        return units[0].min_temp if units else 7
         # try:
         #     return self.controller.active_device(self.zone).min_temp
         # except:
@@ -413,6 +418,8 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
     @property
     def fan_mode(self):
         """Return the current fan modes."""
+        if not self.available:
+            return None
         if self.controller.active_device(self.zone).control_mode == CONTROL_MODE_TEMP:
             # running in temperature set point mode
             return FAN_SPEED_BY_TEMP
@@ -454,6 +461,8 @@ class MagIQtouch(CoordinatorEntity, ClimateEntity):
         """Return the current preset mode, e.g., home, away, temp.
         Requires SUPPORT_PRESET_MODE.
         """
+        if not self.available:
+            return PRESET_NONE
         runningMode = self.controller.current_state.runningMode
         if runningMode == MODE_HEATER_FAN:
             return PRESET_FAN_RECIRC
