@@ -172,7 +172,7 @@ class MagIQtouch_Driver:
             await self.ws_handler(job)
             if self.verbose:
                 _LOGGER.info("ws sent and received: %s\n%s" % (message, self.current_state))
-            return True
+            return job.status == "confirmed" if checker else True
         except asyncio.TimeoutError:
             msg = ""
             if isinstance(job.status, str):
@@ -188,8 +188,10 @@ class MagIQtouch_Driver:
         token = await self._get_token()
         headers = {"user-agent": "Dart/3.2 (dart:io)", "sec-websocket-protocol": "wasp"}
         counter = 0
+        # job.timeout is an absolute deadline, not an aiohttp duration.
+        receive_timeout = max(0.1, job.timeout - time.time())
         timeout = aiohttp.ClientWSTimeout(
-            ws_receive=job.timeout or int(SCAN_INTERVAL.total_seconds() - 3),
+            ws_receive=receive_timeout if job.checker else 45 * 60,
             ws_close=None,
         )
         try:
@@ -281,7 +283,7 @@ class MagIQtouch_Driver:
                 return
             _LOGGER.exception("websocket")
         except asyncio.TimeoutError:
-            _LOGGER.exception(f"websocket timeout {timeout} after {counter} messages.")
+            _LOGGER.warning("WebSocket timeout after %s messages", counter)
         except:
             _LOGGER.exception("websocket")
         if job in self.jobs:
