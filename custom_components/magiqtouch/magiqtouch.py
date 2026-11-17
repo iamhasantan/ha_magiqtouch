@@ -370,7 +370,12 @@ class MagIQtouch_Driver:
         else:
             checker = None
             timeout = 8
-        await self.ws_send(self._refresh_msg, checker, timeout)
+        confirmed = await self.ws_send(self._refresh_msg, checker, timeout)
+        if initial and not confirmed:
+            _LOGGER.warning("Initial state unavailable; keeping cached configuration and waiting for live updates")
+            # Reconnect as an ordinary background status stream so state can recover.
+            await self.background_refresh()
+            return
         if initial or self._config_update_required:
             self.update_zone_list()
             asyncio.create_task(self.save_config_data())
