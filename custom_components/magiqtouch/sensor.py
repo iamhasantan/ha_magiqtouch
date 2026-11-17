@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfTemperature
 
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.update_coordinator import (
@@ -74,7 +75,11 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.label = label
         self.controller = controller
-        self._attr_native_unit_of_measurement = controller.native_unit_of_measurement
+        self._attr_native_unit_of_measurement = (
+            controller.native_unit_of_measurement
+            if controller.current_state.runningMode
+            else UnitOfTemperature.CELSIUS
+        )
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_device_info = {
@@ -103,14 +108,25 @@ class TemperatureSensor(CoordinatorEntity, SensorEntity):
         """Handle updated data from the coordinator."""
         # self._attr_is_on = self.coordinator.data[self.idx]["state"]
         _LOGGER.debug("coordinator updated")
-        self._attr_native_value = self.data_callback(self.zone)
-        self._attr_available = True
+        if not self.controller.current_state.runningMode:
+            self._attr_native_value = None
+            self._attr_available = False
+        else:
+            try:
+                self._attr_native_unit_of_measurement = self.controller.native_unit_of_measurement
+                self._attr_native_value = self.data_callback(self.zone)
+            except (ValueError, IndexError, AttributeError) as exc:
+                _LOGGER.debug("Temperature data unavailable: %s", exc)
+                self._attr_native_value = None
+                self._attr_available = False
+            else:
+                self._attr_available = True
         self.async_write_ha_state()
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID for this sensor."""
-        mac = self.controller.current_state.device
+        mac = self.controller.current_state.device or self.controller.current_system_state.Wifi_Module.MacAddressId
         zone_label = ""
         if self.zone and self.zone != ZONE_NONE:
             zone_name = self.controller.get_zone_name(self.zone).replace(" ", "-")
